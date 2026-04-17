@@ -1,0 +1,13 @@
+[Unit]
+Description=Hive UI Server
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/akamaiben/projects/hive-ui
+ExecStart=/usr/bin/python3 /home/akamaiben/projects/hive-ui/server.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

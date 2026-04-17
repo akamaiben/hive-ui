@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Hive</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0a0a0a;
+    color: #d4d4d4;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  header {
+    padding: 16px 24px;
+    border-bottom: 1px solid #1a1a1a;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  header h1 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #e5c07b;
+    letter-spacing: 0.5px;
+  }
+
+  #clear-btn {
+    background: none;
+    border: 1px solid #333;
+    color: #777;
+    font-family: inherit;
+    font-size: 12px;
+    padding: 4px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  #clear-btn:hover { border-color: #555; color: #aaa; }
+
+  #output {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+    scroll-behavior: smooth;
+  }
+
+  #output::-webkit-scrollbar { width: 6px; }
+  #output::-webkit-scrollbar-track { background: transparent; }
+  #output::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+
+  .entry { margin-bottom: 24px; }
+
+  .entry-task {
+    color: #777;
+    font-size: 12px;
+    margin-bottom: 8px;
+    padding-left: 12px;
+    border-left: 2px solid #333;
+  }
+
+  .entry-agent {
+    display: inline-block;
+    font-size: 11px;
+    color: #0a0a0a;
+    background: #e5c07b;
+    padding: 1px 8px;
+    border-radius: 3px;
+    margin-bottom: 8px;
+    font-weight: 600;
+  }
+
+  .entry-result {
+    font-size: 14px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: #c8c8c8;
+  }
+
+  #thinking {
+    display: none;
+    padding: 24px;
+    color: #e5c07b;
+    font-size: 13px;
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 1; }
+  }
+
+  #input-bar {
+    padding: 16px 24px;
+    border-top: 1px solid #1a1a1a;
+    display: flex;
+    gap: 12px;
+    flex-shrink: 0;
+    background: #0f0f0f;
+  }
+
+  #task-input {
+    flex: 1;
+    background: #141414;
+    border: 1px solid #282828;
+    color: #d4d4d4;
+    font-family: inherit;
+    font-size: 14px;
+    padding: 12px 16px;
+    border-radius: 6px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  #task-input:focus { border-color: #e5c07b; }
+  #task-input::placeholder { color: #444; }
+  #task-input:disabled { opacity: 0.5; }
+
+  #send-btn {
+    background: #e5c07b;
+    border: none;
+    color: #0a0a0a;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 12px 24px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+
+  #send-btn:hover { opacity: 0.85; }
+  #send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .empty-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: #333;
+    font-size: 14px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>THE HIVE</h1>
+  <button id="clear-btn">clear</button>
+</header>
+
+<div id="output">
+  <div class="empty-state" id="empty">type a task below</div>
+</div>
+
+<div id="thinking">thinking&hellip;</div>
+
+<div id="input-bar">
+  <input type="text" id="task-input" placeholder="enter a task&hellip;" autocomplete="off" autofocus>
+  <button id="send-btn">send</button>
+</div>
+
+<script>
+  const HIVE_URL = 'http://127.0.0.1:18790/task';
+
+  const output    = document.getElementById('output');
+  const input     = document.getElementById('task-input');
+  const sendBtn   = document.getElementById('send-btn');
+  const clearBtn  = document.getElementById('clear-btn');
+  const thinking  = document.getElementById('thinking');
+  const empty     = document.getElementById('empty');
+
+  function setLoading(on) {
+    thinking.style.display = on ? 'block' : 'none';
+    input.disabled = on;
+    sendBtn.disabled = on;
+    if (!on) input.focus();
+  }
+
+  function scrollToBottom() {
+    output.scrollTop = output.scrollHeight;
+  }
+
+  function addEntry(task, result, agent) {
+    if (empty) empty.remove();
+
+    const div = document.createElement('div');
+    div.className = 'entry';
+
+    const taskEl = document.createElement('div');
+    taskEl.className = 'entry-task';
+    taskEl.textContent = task;
+    div.appendChild(taskEl);
+
+    if (agent) {
+      const agentEl = document.createElement('div');
+      agentEl.className = 'entry-agent';
+      agentEl.textContent = agent;
+      div.appendChild(agentEl);
+    }
+
+    const resultEl = document.createElement('div');
+    resultEl.className = 'entry-result';
+    resultEl.textContent = result;
+    div.appendChild(resultEl);
+
+    output.appendChild(div);
+    scrollToBottom();
+  }
+
+  async function submitTask() {
+    const message = input.value.trim();
+    if (!message) return;
+
+    input.value = '';
+    setLoading(true);
+    scrollToBottom();
+
+    try {
+      const res = await fetch(HIVE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      const data = await res.json();
+      addEntry(message, data.result || '(no result)', data.routed_to || null);
+    } catch (err) {
+      addEntry(message, 'error: ' + err.message, null);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      submitTask();
+    }
+  });
+
+  sendBtn.addEventListener('click', submitTask);
+
+  clearBtn.addEventListener('click', () => {
+    output.innerHTML = '<div class="empty-state" id="empty">type a task below</div>';
+    input.value = '';
+    input.focus();
+  });
+</script>
+
+</body>
+</html>
